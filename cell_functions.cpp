@@ -1,14 +1,13 @@
 #include "cell.h"
 
-std::vector<std::vector<bool>> make_random(int x, int y, float density){
-  std::vector<bool> temp_line(y,false);
-  std::vector<std::vector<bool>> result;
-  std::srand(std::time(nullptr));
-  for(int j = 0; j < x; j++){
-    for(int i = 0; i < y; i++){
-      temp_line[i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX) < density;
+std::vector<std::vector<bool>> make_random(int width, int height, float density) {
+  std::srand(static_cast<unsigned int>(std::time(nullptr))); // Seed RNG
+  std::vector<std::vector<bool>> result(width, std::vector<bool>(height, false));
+  for (int x = 0; x < width; ++x) {
+    for (int y = 0; y < height; ++y) {
+      float random_val = static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX);
+      result[x][y] = random_val < density;
     }
-    result.push_back(temp_line);
   }
   return result;
 }
@@ -23,37 +22,33 @@ void get_input(){
 
 int sum_neighbors(int x, int y) {
   std::vector<std::vector<bool>>* canvas = (global_variables.timer%2) == 0 ? &global_variables.ping : &global_variables.pong;
-     int result = 0;
-    for (int dx = -1; dx <= 1; dx++)
-        for (int dy = -1; dy <= 1; dy++)
-            if (!(dx == 0 && dy == 0)) {
-                int nx = x + dx;
-                int ny = y + dy;
-                if (nx >= 0 && ny >= 0 &&
-                    nx < canvas->size() &&
-                    ny < (*canvas)[0].size())
-                    result += (*canvas)[nx][ny];
-            }
-    return result;
+  int result = 0;
+  for (int dx = -1; dx <= 1; dx++){
+    for (int dy = -1; dy <= 1; dy++){
+      if (!(dx == 0 && dy == 0)) {
+        int nx = x + dx;
+        int ny = y + dy;
+        if (nx >= 0 && ny >= 0 &&
+          nx < canvas->size() &&
+          ny < (*canvas)[0].size())
+          result += (*canvas)[nx][ny];
+      }
+    }
+  }
+  return result;
 }
 
 void add_neighbors(int x, int y) {
   std::vector<std::vector<bool>>* canvas = (global_variables.timer%2) == 0 ? &global_variables.ping : &global_variables.pong;
     for (int dx = -1; dx <= 1; dx++) {
         for (int dy = -1; dy <= 1; dy++) {
-            if (dx == 0 && dy == 0) continue; // Skip the center cell
-
+            if (dx == 0 && dy == 0) continue;
             int nx = x + dx;
             int ny = y + dy;
-
-            // Optional bounds check:
             if (nx >= 0 && ny >= 0 &&
                 nx < canvas->size() &&
                 ny < (*canvas)[0].size()) {
-                
                 std::pair<int, int> neighbor = {nx, ny};
-
-                // Only insert if not already present
                 if (global_variables.active.find(neighbor) == global_variables.active.end()) {
                     global_variables.active[neighbor] = 0;
                 }
@@ -64,39 +59,58 @@ void add_neighbors(int x, int y) {
 
 void update(){
   global_variables.timer++;
-  std::vector<std::vector<bool>>* ping = 
-    (global_variables.timer%2) == 0 ? &global_variables.ping : &global_variables.pong;
-  std::vector<std::vector<bool>>* pong = 
-    (global_variables.timer%2) == 1 ? &global_variables.ping : &global_variables.pong;
+
+  // read is a pointer to either ping or pong, depending on timer
+  std::vector<std::vector<bool>>* read = (global_variables.timer % 2)? &global_variables.ping : &global_variables.pong;
+  std::vector<std::vector<bool>>* write = (global_variables.timer % 2)? &global_variables.pong : &global_variables.ping;
+  // list of cells too old to bother simulating, will be
+  // removed from global_variables.active once update is complete
   std::vector<std::pair<int, int>> erase_list;
-  int neighbor_sum = 0;
-  int x = 0;
-  int y = 0;
-  int max_x = global_variables.gui_width;
-  int max_y = global_variables.gui_height;
+
+  /*  Theory of operation:
+   *    iterate through active
+   *    for each cell in active, check neighborhood sum
+   *    if that sum == 2, leave unchanged, increment age
+   *    if that sum == 3, make alive if dead and set age == 0,
+   *      if already alive, increment age
+   *    else: if alive, make dead, set age to 0
+   *      if dead, increment age.
+   *    if age > max_age; append to erase list
+   * */
+
   for(auto& element : global_variables.active){
-    if(element.first.first > max_x - 1 || element.first.second > max_y - 1 || element.first.first < 2 || element.first.second < 2) continue;
-    if(element.second > global_variables.max_age)
-      erase_list.push_back(element.first);
-    x = element.first.first;
-    y = element.first.second;
-    neighbor_sum = sum_neighbors(x, y);
-    if(neighbor_sum == 3) {
-      if(!(*pong)[y][x]){
-        add_neighbors(x,y);
-        (*pong)[y][x] = true;
-        global_variables.active[element.first] = 0;
-      } else {
-        global_variables.active[element.first]++;
+    int x = element.first.first;
+    int y = element.first.second;
+
+    // format of read is (*read)[x][y], below line is a bounds check
+    if(x < 1 || x > read->size() || y < 1 || y > (*read)[0].size()) continue;
+
+    int sum = sum_neighbors(x, y);
+    if(sum == 2){
+      element.second++;  // incrementing age
+    }
+    else if(sum == 3){
+      if((*read)[x][y]){
+        element.second++; // incrementing age
+      }
+      else {
+        element.second = 0;
+        (*write)[x][y] = true;
       }
     }
-    else if(neighbor_sum == 2) global_variables.active[element.first]++;
     else {
-      global_variables.active[element.first] = 0;
-      (*pong)[y][x] = false;
+      if((*read)[x][y]){
+        element.second = 0;
+        (*write)[x][y] = false;
+      }
+      else{
+        element.second++;
+      }
     }
+    if(element.second == global_variables.max_age)
+      erase_list.push_back({x, y});
   }
-  for(std::pair victim : erase_list){
+  for(auto victim : erase_list){
     global_variables.active.erase(victim);
   }
 }

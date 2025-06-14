@@ -61,7 +61,7 @@ void update(){
   global_variables.timer++;
 
   // read is a pointer to either ping or pong, depending on timer
-  std::vector<std::vector<bool>>* read = (global_variables.timer % 2)? &global_variables.ping : &global_variables.pong;
+  const std::vector<std::vector<bool>>* read = (global_variables.timer % 2)? &global_variables.ping : &global_variables.pong;
   std::vector<std::vector<bool>>* write = (global_variables.timer % 2)? &global_variables.pong : &global_variables.ping;
   // list of cells too old to bother simulating, will be
   // removed from global_variables.active once update is complete
@@ -71,7 +71,7 @@ void update(){
    *    iterate through active
    *    for each cell in active, check neighborhood sum
    *    if that sum == 2, leave unchanged, increment age
-   *    if that sum == 3, make alive if dead and set age == 0,
+   *    if that sum == 3, make alive if dead, add neighbors to map, and set age == 0,
    *      if already alive, increment age
    *    else: if alive, make dead, set age to 0
    *      if dead, increment age.
@@ -87,14 +87,19 @@ void update(){
 
     int sum = sum_neighbors(x, y);
     if(sum == 2){
+      if((*read)[x][y])
+        (*write)[x][y] = true;
       element.second++;  // incrementing age
+      (*write)[x][y] = (*read)[x][y];
     }
     else if(sum == 3){
       if((*read)[x][y]){
         element.second++; // incrementing age
       }
       else {
+        // if new cell
         element.second = 0;
+	add_neighbors(x, y);
         (*write)[x][y] = true;
       }
     }
@@ -107,7 +112,7 @@ void update(){
         element.second++;
       }
     }
-    if(element.second == global_variables.max_age)
+    if(element.second >= global_variables.max_age)
       erase_list.push_back({x, y});
   }
   for(auto victim : erase_list){

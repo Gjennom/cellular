@@ -11,7 +11,7 @@ struct GlobalVariables {
     int gui_width = 1000; // width of the GUI
     int gui_height = 600; // height of the GUI
     int FPS = 60;         // target FPS
-    int max_age = 10;     // age before cells are ignored
+    int max_age = 1;     // age before cells are ignored
     int timer = 0;        // # of iterations since start
 
     float center_x = gui_width / 2.0;  // center of display
